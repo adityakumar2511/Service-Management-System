@@ -1,0 +1,135 @@
+import axios from "axios";
+import { auth } from "../utils/firebaseConfig";
+
+// ─── Axios Instance ────────────────────────────────────────────────────────────
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api",
+  // ❌ REMOVED: default JSON header (important for file upload)
+  timeout: 10000,
+});
+
+// ─── Request Interceptor ───────────────────────────────────────────────────────
+// Automatically attaches Firebase ID Token to every request
+api.interceptors.request.use(
+  async (config) => {
+    const user = auth.currentUser;
+    if (user) {
+      const token = await user.getIdToken(true);
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// ─── Response Interceptor ─────────────────────────────────────────────────────
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+
+    if (status === 401) {
+      console.warn("Unauthorized — redirecting to login...");
+      window.location.href = "/login";
+    }
+
+    if (status === 403) {
+      console.warn("Access denied. Admin only.");
+    }
+
+    if (status === 500) {
+      console.error("Server error. Please try again later.");
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// ─── Wake-up Ping ─────────────────────────────────────────────────────────────
+export const pingBackend = () => {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+
+  fetch(`${baseURL}/health`, {
+    method: "GET",
+    signal: AbortSignal.timeout(60000),
+  })
+    .then(() => console.log("✅ Backend is awake"))
+    .catch(() => console.warn("⚠️ Backend ping failed — may still be starting"));
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// API Methods
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+export const authAPI = {
+  register: (data) => api.post("/auth/register", data),
+  getMe: () => api.get("/auth/me"),
+};
+
+// ─── User / Profile ───────────────────────────────────────────────────────────
+export const userAPI = {
+  getProfile: () => api.get("/users/profile"),
+  updateProfile: (data) => api.put("/users/profile", data),
+};
+
+// ─── Services ─────────────────────────────────────────────────────────────────
+export const serviceAPI = {
+  getAll: () => api.get("/services"),
+  getById: (id) => api.get(`/services/${id}`),
+  create: (data) => api.post("/services", data),
+  update: (id, data) => api.put(`/services/${id}`, data),
+  delete: (id) => api.delete(`/services/${id}`),
+};
+
+// ─── Employees ────────────────────────────────────────────────────────────────
+export const employeeAPI = {
+  getAll: () => api.get("/employees"),
+  getByUid: (uid) => api.get(`/employees/${uid}`),
+
+  addSkill: (data) => api.post("/employees/services", data),
+  addCustomSkill: (data) => api.post("/employees/services/custom", data),
+  removeSkill: (serviceId) => api.delete(`/employees/services/${serviceId}`),
+};
+
+// ─── Learning ─────────────────────────────────────────────────────────────────
+export const learningAPI = {
+  getMine: () => api.get("/learning"),
+  getAll: () => api.get("/learning/all"),
+  add: (data) => api.post("/learning", data),
+  addCustom: (data) => api.post("/learning/custom", data),
+  updateStatus: (serviceId, data) => api.put(`/learning/${serviceId}`, data),
+  remove: (serviceId) => api.delete(`/learning/${serviceId}`),
+};
+
+// ─── Resources ────────────────────────────────────────────────────────────────
+export const resourceAPI = {
+  getAll: (serviceId) =>
+    api.get("/resources", {
+      params: serviceId ? { service_id: serviceId } : {},
+    }),
+
+  // ✅ FIXED: Upload PDF
+  uploadPdf: (formData) =>
+    api.post("/resources/upload-pdf", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }),
+
+  create: (data) => api.post("/resources", data),
+  delete: (id) => api.delete(`/resources/${id}`),
+};
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+export const adminAPI = {
+  getAdminStats: () => api.get("/admin/stats"),
+  getAdminUsers: () => api.get("/admin/users"),
+  updateUserRole: (uid, role) =>
+    api.put(`/admin/users/${uid}/role`, { role }),
+  updateUserProfile: (uid, data) =>
+    api.put(`/admin/users/${uid}/profile`, data),
+  deleteUser: (uid) => api.delete(`/admin/users/${uid}`),
+};
+
+export default api;
