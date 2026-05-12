@@ -21,3 +21,4 @@ Thumbs.db
 
 # Build output (agar future mein use ho)
 dist/
+.env
